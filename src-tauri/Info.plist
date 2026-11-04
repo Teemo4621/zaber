@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Merged into the macOS bundle by Tauri. EventKit refuses access without these. -->
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Zaber shows today's events and a heads-up before each one in the notch. It only reads your calendars, on this Mac.</string>
+  <key>NSCalendarsUsageDescription</key>
+  <string>Zaber shows today's events and a heads-up before each one in the notch. It only reads your calendars, on this Mac.</string>
+</dict>
+</plist>
