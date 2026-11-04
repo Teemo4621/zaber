@@ -26,6 +26,7 @@ pub struct NowPlaying {
     pub artwork: Option<String>,
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Clone, Copy)]
 pub enum Action {
     PlayPause,
@@ -34,6 +35,7 @@ pub enum Action {
     Seek(i64),
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn choose(sessions: &[(String, bool)], shown: Option<&str>, current: Option<&str>) -> Option<usize> {
     let find = |id: Option<&str>| id.and_then(|id| sessions.iter().position(|(s, _)| s == id));
     let shown_i = find(shown);

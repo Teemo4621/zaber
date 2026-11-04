@@ -49,6 +49,7 @@ pub fn toggle_mic() {
     thread::spawn(platform::toggle_mic);
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum VolumeKey {
     Up,
@@ -56,6 +57,7 @@ pub enum VolumeKey {
     Mute,
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn next_volume(level: f32, up: bool) -> f32 {
     let step = (level * 50.0).round() + if up { 1.0 } else { -1.0 };
     step.clamp(0.0, 50.0) / 50.0

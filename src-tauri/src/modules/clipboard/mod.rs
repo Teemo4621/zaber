@@ -13,6 +13,7 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+#[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Clone, PartialEq, Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Copied {
@@ -22,8 +23,10 @@ pub enum Copied {
     Files { name: String, count: u32 },
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 const MAX_CHARS: usize = 80;
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn summarize(text: &str) -> Option<Copied> {
     let line = text.lines().map(str::trim).find(|l| !l.is_empty())?;
     let short = |s: &str| {
