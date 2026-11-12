@@ -81,7 +81,7 @@ fn changed(last: Option<&NowPlaying>, now: Option<&NowPlaying>, elapsed_ms: i64)
 }
 
 pub fn start(app: AppHandle) {
-    thread::spawn(move || {
+    thread::Builder::new().name("media".into()).spawn(move || {
         let mut last: Option<NowPlaying> = None;
         let mut sent = Instant::now();
         loop {
@@ -93,7 +93,7 @@ pub fn start(app: AppHandle) {
             }
             thread::sleep(Duration::from_secs(1));
         }
-    });
+    }).ok();
 }
 
 #[cfg(test)]

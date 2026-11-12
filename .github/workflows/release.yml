@@ -19,10 +19,13 @@ jobs:
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
-          gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || \
-            gh release create "$TAG" --repo "$REPO" --draft --verify-tag --title "Zaber $TAG" \
-              --notes "Download the \`-setup.exe\` for Windows or the \`.dmg\` for macOS below."
-          echo "id=$(gh api "repos/$REPO/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)" >> "$GITHUB_OUTPUT"
+          id=$(gh api "repos/$REPO/releases" --paginate --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+          if [ -z "$id" ]; then
+            id=$(gh api "repos/$REPO/releases" -f tag_name="$TAG" -f name="Zaber $TAG" -F draft=true \
+              -f body="Download the \`-setup.exe\` for Windows or the \`.dmg\` for macOS below." --jq .id)
+          fi
+          test -n "$id"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
 
   build:
     needs: create-release

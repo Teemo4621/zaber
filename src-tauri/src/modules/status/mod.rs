@@ -35,6 +35,10 @@ pub struct Status {
 
 static LAST: Mutex<Option<Status>> = Mutex::new(None);
 
+pub fn fullscreen() -> bool {
+    LAST.lock().unwrap().as_ref().is_some_and(|s| s.fullscreen)
+}
+
 #[tauri::command]
 pub fn status_now() -> Option<Status> {
     LAST.lock().unwrap().clone()
@@ -72,7 +76,7 @@ fn limit(before: Option<u8>, now: Option<u8>, up: bool, down: bool) -> Option<&'
 }
 
 pub fn start(app: AppHandle) {
-    thread::spawn(move || {
+    thread::Builder::new().name("status".into()).spawn(move || {
         let mut probe = platform::Probe::new();
         let mut tick = 0u64;
         loop {
@@ -88,9 +92,9 @@ pub fn start(app: AppHandle) {
                 *last = Some(now);
             }
             drop(last);
-            thread::sleep(Duration::from_millis(50));
+            thread::sleep(Duration::from_millis(100));
         }
-    });
+    }).ok();
 }
 
 #[cfg(test)]

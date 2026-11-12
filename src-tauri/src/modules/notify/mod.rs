@@ -59,10 +59,15 @@ fn fresh(seen: Option<&HashSet<u32>>, list: Vec<Notice>) -> Vec<Notice> {
 }
 
 pub fn start(app: AppHandle) {
-    thread::spawn(move || {
+    thread::Builder::new().name("notify".into()).spawn(move || {
         platform::request_access();
         let mut seen: Option<HashSet<u32>> = None;
         loop {
+            thread::sleep(Duration::from_secs(2));
+            if crate::modules::status::fullscreen() {
+                seen = None;
+                continue;
+            }
             if let Some(list) = platform::list() {
                 let ids = list.iter().map(|n| n.id).collect();
                 for n in fresh(seen.as_ref(), list) {
@@ -75,9 +80,8 @@ pub fn start(app: AppHandle) {
                 }
                 seen = Some(ids);
             }
-            thread::sleep(Duration::from_secs(1));
         }
-    });
+    }).ok();
 }
 
 #[cfg(test)]

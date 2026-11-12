@@ -20,7 +20,7 @@ pub struct Brightness {
 }
 
 pub fn start(app: AppHandle) {
-    thread::spawn(move || {
+    thread::Builder::new().name("brightness".into()).spawn(move || {
         let mut probe = platform::Probe::new();
         let mut last: Option<u8> = None;
         let mut tick = 0u64;
@@ -36,5 +36,5 @@ pub fn start(app: AppHandle) {
             tick = tick.wrapping_add(1);
             thread::sleep(Duration::from_millis(250));
         }
-    });
+    }).ok();
 }

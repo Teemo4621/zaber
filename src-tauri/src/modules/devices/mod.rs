@@ -91,12 +91,17 @@ fn battery_step(warned: &mut HashMap<String, u8>, id: &str, level: u8) -> bool {
 }
 
 pub fn start(app: AppHandle) {
-    thread::spawn(move || {
+    thread::Builder::new().name("devices".into()).spawn(move || {
         let mut probe = platform::Probe::new();
         let mut known: Option<HashMap<String, Device>> = None;
         let mut warned: HashMap<String, u8> = HashMap::new();
         let mut tick = 0u64;
         loop {
+            thread::sleep(Duration::from_secs(1));
+            tick = tick.wrapping_add(1);
+            if crate::modules::status::fullscreen() {
+                continue;
+            }
             let now: HashMap<String, Device> = probe.devices(tick).into_iter().map(|d| (d.id.clone(), d)).collect();
             *DRIVES.lock().unwrap() = now.values().filter_map(|d| d.path.clone()).collect();
             if let Some(before) = &known {
@@ -110,7 +115,7 @@ pub fn start(app: AppHandle) {
             }
             known = Some(now);
 
-            if tick.is_multiple_of(10) {
+            if tick.is_multiple_of(30) || tick == 1 {
                 let levels = probe.batteries();
                 let now: Vec<Level> = levels.iter().map(|(_, kind, name, level)| Level { kind: *kind, name: name.clone(), level: *level }).collect();
                 let mut last = LEVELS.lock().unwrap();
@@ -127,10 +132,8 @@ pub fn start(app: AppHandle) {
                     }
                 }
             }
-            tick = tick.wrapping_add(1);
-            thread::sleep(Duration::from_secs(1));
         }
-    });
+    }).ok();
 }
 
 #[cfg(test)]

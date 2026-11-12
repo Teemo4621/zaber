@@ -5213,7 +5213,7 @@ dependencies = [
 
 [[package]]
 name = "zaber"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "block2",
@@ -5230,8 +5230,10 @@ dependencies = [
  "tauri-plugin-drag",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
+ "webview2-com",
  "windows 0.61.3",
  "windows-collections 0.2.0",
+ "windows-core 0.62.2",
 ]
 
 [[package]]

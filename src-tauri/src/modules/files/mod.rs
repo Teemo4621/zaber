@@ -166,7 +166,7 @@ pub fn start(app: AppHandle) {
         .into_iter()
         .filter_map(|(source, dir)| Some(Watch::new(source, dir?)))
         .collect();
-    thread::spawn(move || {
+    thread::Builder::new().name("files".into()).spawn(move || {
         let mut downloading: Vec<Downloading> = Vec::new();
         loop {
             for w in &mut watches {
@@ -190,7 +190,7 @@ pub fn start(app: AppHandle) {
             }
             thread::sleep(Duration::from_secs(1));
         }
-    });
+    }).ok();
 }
 
 #[cfg(test)]

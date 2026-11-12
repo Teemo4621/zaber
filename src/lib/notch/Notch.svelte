@@ -52,8 +52,12 @@
     water: { icon: "water", label: "tab.water" },
     shelf: { icon: "shelf", label: "tab.shelf" },
   };
-  const IDLE = { w: 180, h: 32 };
-  const PILL = { w: 260, h: 32 };
+  let hardware = $state<{ w: number; h: number } | null>(null);
+  invoke<{ w: number; h: number } | null>("notch_hardware").then((n) => (hardware ??= n));
+  listen<{ w: number; h: number } | null>("notch:hardware", (e) => (hardware = e.payload));
+  const pillH = $derived(hardware ? Math.max(32, Math.round(hardware.h)) : 32);
+  const IDLE = $derived(hardware ? { w: Math.round(hardware.w), h: pillH } : { w: 180, h: 32 });
+  const PILL = $derived({ w: 260, h: pillH });
   const EXPANDED = { w: 480, h: 220 };
   const LYRICS = { w: 640, h: 240 };
   const PEEK_W: Record<PeekT["kind"], number> = {
@@ -62,8 +66,8 @@
     claude: 420, claudeNote: 360, mic: 300, privacy: 340, file: 420,
   };
   const ACTION_PEEKS: PeekT["kind"][] = ["water", "todo", "calendar", "device", "file"];
-  const AGENT_PILL = { w: 300, h: 32 };
-  const DOWNLOAD_PILL = { w: 340, h: 32 };
+  const AGENT_PILL = $derived({ w: 300, h: pillH });
+  const DOWNLOAD_PILL = $derived({ w: 340, h: pillH });
   const LIVE_LYRIC = { w: 360, h: 56 };
   const MESSAGE = { w: 440, h: 168 };
   const DOT = { w: 10, h: 10 };

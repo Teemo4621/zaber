@@ -97,7 +97,10 @@ export async function fetchLyrics(n: NowPlaying): Promise<LyricLine[] | null> {
     pick(await lrclib("search", { q: `${artist} ${track}`.trim() }));
 
   const lines = synced ? parseLrc(synced) : plain ? parsePlain(plain) : null;
-  if (lines || !busy) lyricsCache.set(key, lines);
+  if (lines || !busy) {
+    if (lyricsCache.size >= 30) lyricsCache.delete(lyricsCache.keys().next().value!);
+    lyricsCache.set(key, lines);
+  }
   return lines;
 }
 

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{
@@ -23,6 +23,19 @@ pub struct Rect {
 pub struct HitRect(Mutex<Rect>);
 
 static FOLLOW_CURSOR: AtomicBool = AtomicBool::new(false);
+
+#[derive(Clone, Copy, PartialEq, Serialize)]
+pub struct NotchSize {
+    w: f64,
+    h: f64,
+}
+
+static HARDWARE: Mutex<Option<NotchSize>> = Mutex::new(None);
+
+#[tauri::command]
+pub fn notch_hardware() -> Option<NotchSize> {
+    *HARDWARE.lock().unwrap()
+}
 
 #[tauri::command]
 pub fn notch_set_hit_rect(rect: Rect, state: tauri::State<HitRect>) {
@@ -104,6 +117,8 @@ pub fn setup(app: &AppHandle, win: &WebviewWindow) -> tauri::Result<()> {
         place(win, &m)?;
     }
     win.set_ignore_cursor_events(true)?;
+    #[cfg(windows)]
+    let _ = win.with_webview(low_memory);
     watch_hover(win.clone());
 
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
@@ -128,6 +143,59 @@ pub fn setup(app: &AppHandle, win: &WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn place(win: &WebviewWindow, monitor: &Monitor) -> tauri::Result<()> {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSMainMenuWindowLevel, NSScreen, NSWindow, NSWindowCollectionBehavior};
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
+
+    let ns = win.ns_window()? as usize;
+    let scale = monitor.scale_factor();
+    let at = monitor.position().to_logical::<f64>(scale);
+    let size = win.outer_size()?.to_logical::<f64>(scale);
+    let app = win.app_handle().clone();
+    win.run_on_main_thread(move || {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        let window = unsafe { &*(ns as *const NSWindow) };
+        window.setLevel(NSMainMenuWindowLevel + 3);
+        window.setCollectionBehavior(
+            NSWindowCollectionBehavior::CanJoinAllSpaces
+                | NSWindowCollectionBehavior::Stationary
+                | NSWindowCollectionBehavior::FullScreenAuxiliary
+                | NSWindowCollectionBehavior::IgnoresCycle,
+        );
+        window.setHasShadow(false);
+        let screens = NSScreen::screens(mtm);
+        let Some(primary) = screens.firstObject() else { return };
+        let top = primary.frame().size.height;
+        let screen = screens
+            .iter()
+            .find(|s| {
+                let f = s.frame();
+                (f.origin.x - at.x).abs() < 2.0 && (top - f.origin.y - f.size.height - at.y).abs() < 2.0
+            })
+            .unwrap_or(primary);
+        let f = screen.frame();
+        let inset = screen.safeAreaInsets().top;
+        let notch = (inset > 0.0).then(|| NotchSize {
+            w: f.size.width - screen.auxiliaryTopLeftArea().size.width - screen.auxiliaryTopRightArea().size.width,
+            h: inset,
+        });
+        let changed = {
+            let mut hw = HARDWARE.lock().unwrap();
+            let changed = *hw != notch;
+            *hw = notch;
+            changed
+        };
+        if changed {
+            let _ = app.emit("notch:hardware", notch);
+        }
+        let origin = NSPoint::new(f.origin.x + (f.size.width - size.width) / 2.0, f.origin.y + f.size.height - size.height);
+        window.setFrame_display(NSRect::new(origin, NSSize::new(size.width, size.height)), true);
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
 fn place(win: &WebviewWindow, monitor: &Monitor) -> tauri::Result<()> {
     let (m, w) = (monitor.position(), win.outer_size()?);
     let x = m.x + (monitor.size().width as i32 - w.width as i32) / 2;
@@ -147,29 +215,34 @@ fn near(p: LogicalPosition<f64>, r: Rect) -> Option<i8> {
 }
 
 fn watch_hover(win: WebviewWindow) {
-    thread::spawn(move || {
+    thread::Builder::new().name("hover".into()).spawn(move || {
         let mut hovering = false;
         let mut looking: Option<i8> = None;
         let mut display: Option<String> = None;
         let mut tick = 0u64;
         #[cfg(windows)]
         let mut on_top = (0isize, 0u8);
+        let mut frame: Option<(PhysicalPosition<i32>, f64)> = None;
+        let mut wait = 50;
         loop {
-            thread::sleep(Duration::from_millis(50));
+            thread::sleep(Duration::from_millis(wait));
             tick = tick.wrapping_add(1);
             #[cfg(windows)]
             keep_on_top(&win, &mut on_top);
-            if tick.is_multiple_of(20)
-                && FOLLOW_CURSOR.load(Ordering::Relaxed)
-                && let Some(m) = cursor_monitor(&win)
-                && display.as_deref() != m.name().map(String::as_str)
-            {
-                display = m.name().cloned();
-                let _ = place(&win, &m);
+            if tick.is_multiple_of(20) {
+                frame = None;
+                if FOLLOW_CURSOR.load(Ordering::Relaxed)
+                    && let Some(m) = cursor_monitor(&win)
+                    && display.as_deref() != m.name().map(String::as_str)
+                {
+                    display = m.name().cloned();
+                    let _ = place(&win, &m);
+                }
             }
-            let (Ok(cursor), Ok(origin), Ok(scale)) =
-                (win.cursor_position(), win.outer_position(), win.scale_factor())
-            else {
+            if frame.is_none() {
+                frame = win.outer_position().ok().zip(win.scale_factor().ok());
+            }
+            let (Some((origin, scale)), Some(cursor)) = (frame, cursor(&win)) else {
                 continue;
             };
             let p: LogicalPosition<f64> =
@@ -186,8 +259,34 @@ fn watch_hover(win: WebviewWindow) {
                 let _ = win.set_ignore_cursor_events(!inside);
                 let _ = win.emit("notch:hover", inside);
             }
+            wait = if inside || step.is_some() { 50 } else { 120 };
         }
-    });
+    }).ok();
+}
+
+#[cfg(windows)]
+fn cursor(_: &WebviewWindow) -> Option<PhysicalPosition<f64>> {
+    let mut p = windows::Win32::Foundation::POINT::default();
+    unsafe { windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut p) }.ok()?;
+    Some(PhysicalPosition::new(p.x as f64, p.y as f64))
+}
+
+#[cfg(not(windows))]
+fn cursor(win: &WebviewWindow) -> Option<PhysicalPosition<f64>> {
+    win.cursor_position().ok()
+}
+
+#[cfg(windows)]
+fn low_memory(webview: tauri::webview::PlatformWebview) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, ICoreWebView2_19};
+    use windows_core::Interface;
+    unsafe {
+        if let Ok(core) = webview.controller().CoreWebView2()
+            && let Ok(core) = core.cast::<ICoreWebView2_19>()
+        {
+            let _ = core.SetMemoryUsageTargetLevel(COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW);
+        }
+    }
 }
 
 #[cfg(windows)]

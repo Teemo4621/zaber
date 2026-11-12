@@ -46,7 +46,7 @@ pub fn summarize(text: &str) -> Option<Copied> {
 }
 
 pub fn start(app: AppHandle) {
-    thread::spawn(move || {
+    thread::Builder::new().name("clipboard".into()).spawn(move || {
         let mut seen = platform::sequence();
         loop {
             thread::sleep(Duration::from_millis(200));
@@ -59,7 +59,7 @@ pub fn start(app: AppHandle) {
                 let _ = app.emit("clipboard:copied", c);
             }
         }
-    });
+    }).ok();
 }
 
 #[cfg(test)]

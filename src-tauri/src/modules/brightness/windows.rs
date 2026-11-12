@@ -10,17 +10,19 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::System::Rpc::{RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE};
 use windows::Win32::System::Wmi::{
-    IWbemClassObject, IWbemLocator, IWbemServices, WBEM_FLAG_FORWARD_ONLY, WBEM_FLAG_RETURN_IMMEDIATELY, WBEM_INFINITE,
+    IEnumWbemClassObject, IWbemClassObject, IWbemLocator, IWbemServices, WBEM_FLAG_FORWARD_ONLY, WBEM_FLAG_RETURN_IMMEDIATELY, WBEM_INFINITE,
     WbemLocator,
 };
 use windows::Win32::System::Variant::{VARIANT, VariantClear, VariantToInt32};
 use windows::core::{BOOL, BSTR, w};
 
-const DDC_EVERY: u64 = 8;
+const DDC_EVERY: u64 = 40;
 
 pub struct Probe {
     wmi: Option<IWbemServices>,
+    events: Option<IEnumWbemClassObject>,
     external: bool,
+    last_panel: Option<u8>,
     last_external: Option<u8>,
 }
 
@@ -36,14 +38,34 @@ impl Probe {
                 })
                 .ok()
         };
-        let mut p = Self { wmi, external: false, last_external: None };
-        p.external = p.panel().is_none();
+        let events = wmi.as_ref().and_then(|svc| unsafe {
+            svc.ExecNotificationQuery(
+                &BSTR::from("WQL"),
+                &BSTR::from("SELECT Brightness FROM WmiMonitorBrightnessEvent"),
+                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                None,
+            )
+            .ok()
+        });
+        let mut p = Self { wmi, events, external: false, last_panel: None, last_external: None };
+        p.last_panel = p.panel();
+        p.external = p.last_panel.is_none();
         p
     }
 
     pub fn level(&mut self, tick: u64) -> Option<u8> {
         if !self.external {
-            return self.panel();
+            let Some(events) = &self.events else { return self.panel() };
+            loop {
+                let mut row: [Option<IWbemClassObject>; 1] = [None];
+                let mut got = 0u32;
+                let _ = unsafe { events.Next(0, &mut row, &mut got) };
+                let Some(row) = row[0].take().filter(|_| got == 1) else { break };
+                if let Some(level) = read_u8(&row, w!("Brightness")) {
+                    self.last_panel = Some(level);
+                }
+            }
+            return self.last_panel;
         }
         if tick.is_multiple_of(DDC_EVERY) {
             self.last_external = external_level();
@@ -65,13 +87,18 @@ impl Probe {
             let mut row: [Option<IWbemClassObject>; 1] = [None];
             let mut got = 0u32;
             let _ = rows.Next(WBEM_INFINITE, &mut row, &mut got);
-            let row = row[0].take()?;
-            let mut v = VARIANT::default();
-            row.Get(w!("CurrentBrightness"), 0, &mut v, None, None).ok()?;
-            let n = VariantToInt32(&v);
-            let _ = VariantClear(&mut v);
-            n.ok().and_then(|n| u8::try_from(n).ok())
+            read_u8(&row[0].take()?, w!("CurrentBrightness"))
         }
+    }
+}
+
+fn read_u8(row: &IWbemClassObject, name: windows::core::PCWSTR) -> Option<u8> {
+    unsafe {
+        let mut v = VARIANT::default();
+        row.Get(name, 0, &mut v, None, None).ok()?;
+        let n = VariantToInt32(&v);
+        let _ = VariantClear(&mut v);
+        n.ok().and_then(|n| u8::try_from(n).ok())
     }
 }
 

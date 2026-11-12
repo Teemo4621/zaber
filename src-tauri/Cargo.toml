@@ -1,6 +1,6 @@
 [package]
 name = "zaber"
-version = "0.1.0"
+version = "0.2.0"
 description = "Notch app for Windows and macOS"
 edition = "2024"
 
@@ -24,14 +24,16 @@ tauri-plugin-drag = "2.1.1"
 tauri-plugin-global-shortcut = "2"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = ["Media_Control", "Foundation", "Foundation_Collections", "Storage_Streams", "ApplicationModel_Appointments", "UI", "UI_ViewManagement", "Networking_Connectivity", "Win32_Foundation", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Power", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_Devices_FunctionDiscovery", "Win32_UI_Shell_PropertiesSystem", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Globalization", "UI_Notifications", "UI_Notifications_Management", "Win32_System_LibraryLoader", "Win32_Devices_Display", "Win32_Graphics_Gdi", "Win32_System_Wmi", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole", "Win32_Storage_FileSystem", "Devices_Enumeration", "Win32_System_Rpc", "Win32_System_Registry"] }
+windows = { version = "0.61", features = ["Media_Control", "Foundation", "Foundation_Collections", "Storage_Streams", "ApplicationModel_Appointments", "UI", "UI_ViewManagement", "Networking_Connectivity", "Win32_Foundation", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Power", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_Devices_FunctionDiscovery", "Win32_UI_Shell_PropertiesSystem", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Globalization", "UI_Notifications", "UI_Notifications_Management", "Win32_System_LibraryLoader", "Win32_Devices_Display", "Win32_Graphics_Gdi", "Win32_System_Wmi", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole", "Win32_Storage_FileSystem", "Devices_Enumeration", "Win32_System_Rpc", "Win32_System_Registry", "Win32_UI_Input"] }
+webview2-com = "0.39"
+windows-core = "0.62"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 block2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDate", "NSError", "NSString", "NSPredicate", "NSURL"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDate", "NSError", "NSGeometry", "NSString", "NSPredicate", "NSURL"] }
 objc2-event-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-app-kit", "EKCalendar", "EKCalendarItem", "EKEvent", "EKEventStore", "EKObject", "EKTypes"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSColor", "NSColorSpace"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSColor", "NSColorSpace", "NSGraphics", "NSResponder", "NSScreen", "NSWindow"] }
 
 [profile.release]
 codegen-units = 1

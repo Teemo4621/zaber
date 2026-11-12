@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use windows::Devices::Enumeration::{DeviceInformation, DeviceInformationKind};
 use windows::Foundation::IReference;
 use windows::Win32::Storage::FileSystem::{GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW};
+use windows::Win32::UI::Input::{GetRawInputDeviceList, RAWINPUTDEVICELIST};
 use windows::core::{GUID, HSTRING, IInspectable, Interface, PCWSTR};
 
 use windows_collections::IIterable;
@@ -10,7 +11,7 @@ use windows_collections::IIterable;
 use super::{Device, Kind};
 
 const DRIVE_REMOVABLE: u32 = 2;
-const INPUT_EVERY: u64 = 3;
+const RECHECK_EVERY: u64 = 60;
 const KEYBOARD_CLASS: &str = "{4d36e96b-e325-11ce-bfc1-08002be10318}";
 const MOUSE_CLASS: &str = "{4d36e96f-e325-11ce-bfc1-08002be10318}";
 const CONTAINER: &str = "System.Devices.ContainerId";
@@ -19,22 +20,33 @@ const IS_CONNECTED: &str = "{83DA6326-97A6-4088-9453-A1923F573B29} 15";
 
 pub struct Probe {
     input: Vec<Device>,
+    input_count: Option<u32>,
+    drives: Vec<Device>,
+    drive_mask: Option<u32>,
     names: HashMap<String, String>,
 }
 
 impl Probe {
     pub fn new() -> Self {
-        Self { input: Vec::new(), names: HashMap::new() }
+        Self { input: Vec::new(), input_count: None, drives: Vec::new(), drive_mask: None, names: HashMap::new() }
     }
 
     pub fn devices(&mut self, tick: u64) -> Vec<Device> {
-        if tick.is_multiple_of(INPUT_EVERY) {
+        let recheck = tick.is_multiple_of(RECHECK_EVERY);
+        let mask = unsafe { GetLogicalDrives() };
+        if recheck || self.drive_mask != Some(mask) {
+            self.drive_mask = Some(mask);
+            self.drives = drives(mask);
+        }
+        let count = raw_input_count();
+        if recheck || self.input_count != Some(count) {
+            self.input_count = Some(count);
             self.input = [(KEYBOARD_CLASS, Kind::Keyboard), (MOUSE_CLASS, Kind::Mouse)]
                 .into_iter()
                 .flat_map(|(class, kind)| self.input_devices(class, kind))
                 .collect();
         }
-        let mut all = drives();
+        let mut all = self.drives.clone();
         all.extend(self.input.iter().cloned());
         all
     }
@@ -111,9 +123,14 @@ fn guess_kind(name: &str) -> Kind {
     }
 }
 
-fn drives() -> Vec<Device> {
+fn raw_input_count() -> u32 {
+    let mut n = 0u32;
+    unsafe { GetRawInputDeviceList(None, &mut n, size_of::<RAWINPUTDEVICELIST>() as u32) };
+    n
+}
+
+fn drives(mask: u32) -> Vec<Device> {
     let mut out = Vec::new();
-    let mask = unsafe { GetLogicalDrives() };
     for i in 0..26u32 {
         if mask & (1 << i) == 0 {
             continue;

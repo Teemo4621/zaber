@@ -35,6 +35,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             notch::notch_set_hit_rect,
             notch::notch_set_display,
+            notch::notch_hardware,
             notch::settings_open,
             notch::app_launch,
             uninstall::app_uninstall,

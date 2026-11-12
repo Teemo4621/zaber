@@ -19,8 +19,8 @@ use std::thread;
 
 use super::Status;
 
-const SLOW_EVERY: u64 = 40;
-const FULLSCREEN_AFTER: u8 = 20;
+const SLOW_EVERY: u64 = 20;
+const FULLSCREEN_AFTER: u8 = 10;
 const LAYOUT_SETTLE: u8 = 10;
 
 #[derive(Default)]
