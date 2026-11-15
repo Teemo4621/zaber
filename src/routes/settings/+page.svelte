@@ -7,7 +7,7 @@
   import AgentLogo, { AGENTS, type AgentId } from "$lib/agents/AgentLogo.svelte";
   import Icon, { type IconName } from "$lib/Icon.svelte";
   import { t, type TKey } from "$lib/i18n.svelte";
-  import { DEFAULT_SETTINGS, NOTCH_SCALE, settings, updateSettings, type PeekKind, type Settings, type TabId } from "$lib/settings.svelte";
+  import { DEFAULT_SETTINGS, NOTCH_SIZE, settings, updateSettings, type PeekKind, type Settings, type TabId } from "$lib/settings.svelte";
   import { status } from "$lib/status.svelte";
 
   type Section = "general" | "tabs" | "peeks" | "replies" | "appearance" | "about";
@@ -78,7 +78,9 @@
     ["#30d158", "color.green"], ["#64d2ff", "color.sky"], ["#0a84ff", "color.blue"], ["#bf5af2", "color.purple"],
     ["#ff375f", "color.pink"], ["#ff9f0a", "color.orange"], ["#ffd60a", "color.yellow"], ["#f5f5f7", "color.white"],
   ];
-  const SIZES = ["compact", "standard", "large"] as const;
+  let sizeDraft = $state<number | null>(null);
+  const notchSize = $derived(sizeDraft ?? s.notchSize);
+  const px = (n: number) => Math.round(n * notchSize);
 
   let notifyAccess = $state<string>();
   invoke<string>("notify_access").then((a) => (notifyAccess = a)).catch(() => {});
@@ -130,7 +132,7 @@
 
   function resetAppearance() {
     const d = DEFAULT_SETTINGS;
-    updateSettings({ notchStyle: d.notchStyle, notchSize: d.notchSize, textSize: d.textSize, motion: d.motion, accents: d.accents, useSystemAccent: false, followArtwork: false, glow: d.glow });
+    updateSettings({ notchStyle: d.notchStyle, shape: d.shape, notchSize: d.notchSize, fade: d.fade, textSize: d.textSize, motion: d.motion, accents: d.accents, useSystemAccent: false, followArtwork: false, glow: d.glow });
   }
 
   let confirmReset = $state(false);
@@ -394,7 +396,7 @@
     {:else if section === "appearance"}
       <div class="preview" aria-hidden="true">
         <span class="pv-label">{t("set.preview")}</span>
-        <div class="pv-row" style:zoom={NOTCH_SCALE[s.notchSize]}>
+        <div class="pv-row" class:island={s.shape === "island"} style:zoom={notchSize}>
           <div class="pv" style:width="200px">
             <span class="art"></span>
             <span class="wave"><i></i><i></i><i></i><i></i></span>
@@ -419,12 +421,29 @@
           </div>
         </div>
         <div class="row">
-          {@render badge("resize")}
-          <div class="rt"><b>{t("set.size")}</b><span>{t(`set.sizeHint.${s.notchSize}` as TKey)}</span></div>
-          <div class="seg" role="radiogroup" aria-label={t("set.size")}>
-            {#each SIZES as id (id)}
-              <label><input type="radio" name="notch-size" checked={s.notchSize === id} onchange={() => set("notchSize", id)} />{t(`set.size.${id}`)}</label>
+          {@render badge("notch")}
+          <div class="rt"><b>{t("set.shape")}</b><span>{t(`set.shapeHint.${s.shape}` as TKey)}</span></div>
+          <div class="seg" role="radiogroup" aria-label={t("set.shape")}>
+            {#each ["notch", "island"] as const as id (id)}
+              <label><input type="radio" name="shape" checked={s.shape === id} onchange={() => set("shape", id)} />{t(`set.shape.${id}`)}</label>
             {/each}
+          </div>
+        </div>
+        <div class="row">
+          {@render badge("resize")}
+          <div class="rt"><b>{t("set.size")}</b><span>{t("set.sizeHint", { pw: px(180), ph: px(32), ow: px(480), oh: px(220) })}</span></div>
+          <div class="range">
+            <input
+              type="range"
+              min={NOTCH_SIZE.min}
+              max={NOTCH_SIZE.max}
+              step="0.01"
+              value={s.notchSize}
+              oninput={(e) => (sizeDraft = +e.currentTarget.value)}
+              onchange={(e) => (set("notchSize", +e.currentTarget.value), (sizeDraft = null))}
+              aria-label={t("set.size")}
+            />
+            <span class="pill">{Math.round(notchSize * 100)}%</span>
           </div>
         </div>
         <div class="row">
@@ -480,6 +499,11 @@
           {@render badge("sparkle")}
           <div class="rt"><b>{t("set.glow")}</b><span>{t("set.glowHint")}</span></div>
           <input class="switch" type="checkbox" checked={s.glow} onchange={(e) => set("glow", e.currentTarget.checked)} aria-label={t("set.glow")} />
+        </div>
+        <div class="row">
+          {@render badge("layers")}
+          <div class="rt"><b>{t("set.fade")}</b><span>{t("set.fadeHint")}</span></div>
+          <input class="switch" type="checkbox" checked={s.fade} onchange={(e) => set("fade", e.currentTarget.checked)} aria-label={t("set.fade")} />
         </div>
       </div>
     {:else}
@@ -983,11 +1007,15 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    background: var(--notch-bg);
+    background: var(--notch-fill);
     border: var(--notch-border);
     border-top: 0;
     color: var(--notch-fg);
     font-size: var(--pill-text);
+  }
+  .island .pv {
+    border-radius: 17px;
+    border-top: var(--notch-border);
   }
   .pv .art {
     width: 22px;

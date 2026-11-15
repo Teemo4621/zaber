@@ -9,7 +9,7 @@
   import Battery from "$lib/Battery.svelte";
   import Icon, { type IconName } from "$lib/Icon.svelte";
   import { locale, t, type TKey } from "$lib/i18n.svelte";
-  import { NOTCH_SCALE, settings, updateSettings, type TabId } from "$lib/settings.svelte";
+  import { settings, updateSettings, type TabId } from "$lib/settings.svelte";
   import { status } from "$lib/status.svelte";
   import { reduceMotion } from "$lib/theme.svelte";
   import CalendarView from "$lib/modules/calendar/CalendarView.svelte";
@@ -39,7 +39,7 @@
   import { untrack } from "svelte";
   import { feel, pop, strainAt, stretch } from "./nudge.svelte";
   import Peek from "./Peek.svelte";
-  import { deviceLevels, dismissPeek, peeks, type Peek as PeekT } from "./peeks.svelte";
+  import { deviceLevels, dismissPeek, holdPeek, peeks, type Peek as PeekT } from "./peeks.svelte";
 
   type Tab = TabId | "agents";
   const TABS: Record<Tab, { icon: IconName; label: TKey }> = {
@@ -55,8 +55,13 @@
   let hardware = $state<{ w: number; h: number } | null>(null);
   invoke<{ w: number; h: number } | null>("notch_hardware").then((n) => (hardware ??= n));
   listen<{ w: number; h: number } | null>("notch:hardware", (e) => (hardware = e.payload));
+  const island = $derived(settings.value.shape === "island" && !hardware);
+  const GAP = 8;
   const pillH = $derived(hardware ? Math.max(32, Math.round(hardware.h)) : 32);
-  const IDLE = $derived(hardware ? { w: Math.round(hardware.w), h: pillH } : { w: 180, h: 32 });
+  const inset = $derived(hardware ? Math.round(hardware.h) : 0);
+  const wing = $derived(hardware && settings.value.companion ? 52 : 0);
+  const IDLE = $derived(hardware ? { w: Math.round(hardware.w) + 2 * wing, h: pillH } : { w: 180, h: 32 });
+  const below = (s: { w: number; h: number }) => ({ w: s.w, h: s.h + inset });
   const PILL = $derived({ w: 260, h: pillH });
   const EXPANDED = { w: 480, h: 220 };
   const LYRICS = { w: 640, h: 240 };
@@ -68,7 +73,7 @@
   const ACTION_PEEKS: PeekT["kind"][] = ["water", "todo", "calendar", "device", "file"];
   const AGENT_PILL = $derived({ w: 300, h: pillH });
   const DOWNLOAD_PILL = $derived({ w: 340, h: pillH });
-  const LIVE_LYRIC = { w: 360, h: 56 };
+  const LIVE_LYRIC = $derived(hardware ? { w: 360, h: pillH + 24 } : { w: 440, h: pillH });
   const MESSAGE = { w: 440, h: 168 };
   const DOT = { w: 10, h: 10 };
   const WELCOME = { w: 420, h: 170 };
@@ -85,7 +90,7 @@
   let asking = $state(false);
   const request = $derived(asking ? (claude.queue[0] ?? null) : null);
   let intro = $state<"dot" | "pill" | "eyes" | "welcome" | null>("dot");
-  const scale = $derived(NOTCH_SCALE[settings.value.notchSize] ?? 1);
+  const scale = $derived(settings.value.notchSize);
 
   const tabs = $derived<Tab[]>([...settings.value.tabs.filter((x) => x.on).map((x) => x.id), ...(claude.sessions.length || claude.usage ? (["agents"] as const) : [])]);
   let keys = $state(false);
@@ -106,14 +111,18 @@
   });
 
   const pillBusy = $derived(!expanded && !message && !request && !intro && (collapsed === "media" || collapsed === "focus" || collapsed === "agents"));
+  const hud = $derived(!!peeks.current && peeks.current.kind !== "notification");
+  const away = $derived(settings.value.hideFullscreen && (status.now?.fullscreen ?? false) && !hud && !intro);
   const target = $derived.by(() => {
-    if (intro) return intro === "dot" ? DOT : intro === "welcome" ? WELCOME : IDLE;
-    if (message) return MESSAGE;
-    if (request) return { w: 480, h: request.kind === "permission" ? 196 : Math.min(300, 140 + request.fields.reduce((h, f) => h + (f.kind === "enum" ? f.options.length * 42 : 42), 0)) };
-    if (expanded) return tab === "media" && mediaUi.lyrics && media.now ? LYRICS : EXPANDED;
+    if (away) return { w: IDLE.w, h: 0 };
+    if (intro) return intro === "dot" ? DOT : intro === "welcome" ? below(WELCOME) : IDLE;
+    if (message) return below(MESSAGE);
+    if (request) return below({ w: 480, h: request.kind === "permission" ? 196 : Math.min(300, 140 + request.fields.reduce((h, f) => h + (f.kind === "enum" ? f.options.length * 42 : 42), 0)) });
+    if (expanded) return below(tab === "media" && mediaUi.lyrics && media.now ? LYRICS : EXPANDED);
     if (collapsed === "peek" && peeks.current) {
       const p = peeks.current;
-      return { w: PEEK_W[p.kind], h: p.kind === "notification" || p.kind === "claude" ? 52 : ACTION_PEEKS.includes(p.kind) ? 40 : 36 };
+      const h = p.kind === "notification" || p.kind === "claude" ? 52 : ACTION_PEEKS.includes(p.kind) ? 40 : 36;
+      return hardware ? { w: Math.round(hardware.w), h: inset + h } : { w: PEEK_W[p.kind], h };
     }
     if (collapsed === "media" && mediaUi.lyrics && mediaUi.line) return LIVE_LYRIC;
     return collapsed === "idle" ? IDLE : collapsed === "agents" ? AGENT_PILL : collapsed === "download" ? DOWNLOAD_PILL : PILL;
@@ -121,6 +130,7 @@
   const OPEN = feel(0.42, 0.8);
   const CLOSE = feel(0.45, 1);
   const even = (n: number) => 2 * Math.round(n / 2);
+  const sub = (n: number) => Math.round(n * 4) / 4;
   const size = Spring.of(() => target, OPEN);
   $effect(() => {
     const t = target;
@@ -130,10 +140,10 @@
   const box = $derived.by(() => {
     if (reduceMotion()) return { ...target, x: 0 };
     const s = stretch.current;
-    return { w: even(size.current.w + s.w), h: Math.round(size.current.h + s.h), x: Math.round(s.x) };
+    return { w: Math.max(0, sub(size.current.w + s.w)), h: Math.max(0, sub(size.current.h + s.h)), x: sub(s.x) };
   });
   const inner = $derived(reduceMotion() ? target : { w: even(target.w + stretch.current.w), h: Math.round(target.h + stretch.current.h) });
-  const radius = $derived(Math.min(28, 14 + Math.max(0, box.h - 40) * 0.1));
+  const radius = $derived(island ? Math.min(box.h / 2, 30) : Math.min(28, 14 + Math.max(0, box.h - 40) * 0.1));
   const ear = $derived(Math.round(Math.min(14, 7 + Math.max(0, box.h - 40) * 0.04)));
   const aura = $derived(
     expanded && !intro && !message && !request && tab === "media" && media.now && settings.value.followArtwork ? mediaUi.artColor : null,
@@ -168,7 +178,8 @@
 
   $effect(() => {
     const [w, h] = [target.w * scale, target.h * scale];
-    invoke("notch_set_hit_rect", { rect: { x: (innerWidth - w) / 2, y: 0, w, h } });
+    const idle = away || (!expanded && !message && !request && !intro && collapsed === "idle" && !aura);
+    invoke("notch_set_hit_rect", { rect: { x: (innerWidth - w) / 2, y: 0, w, h: h && h + (island ? GAP * scale : 0) }, idle });
   });
 
   $effect(() => {
@@ -185,11 +196,16 @@
 
   let hidden = false;
   $effect(() => {
-    const hide = settings.value.hideFullscreen && (status.now?.fullscreen ?? false);
-    if (hide === hidden) return;
-    hidden = hide;
-    const win = getCurrentWindow();
-    (hide ? win.hide() : win.show()).catch(() => {});
+    if (!away) {
+      if (hidden) invoke("notch_set_visible", { visible: true }).catch(() => {});
+      hidden = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      hidden = true;
+      invoke("notch_set_visible", { visible: false }).catch(() => {});
+    }, fadeMs(650));
+    return () => clearTimeout(timer);
   });
 
   function open() {
@@ -223,10 +239,34 @@
   });
 
   let openTimer: ReturnType<typeof setTimeout> | undefined;
+  let holding = false;
+  function peekClick(e: MouseEvent) {
+    if (!holding || (e.target as HTMLElement).closest("button, a, input")) return;
+    holding = false;
+    holdPeek(false);
+    open();
+  }
+  let opening = $state(false);
+  $effect(() => {
+    if (!expanded) return;
+    opening = true;
+    const timer = setTimeout(() => (opening = false), 600);
+    return () => clearTimeout(timer);
+  });
   const unlistenHover = listen<boolean>("notch:hover", (e) => {
     hovering = e.payload;
     clearTimeout(openTimer);
     if (keys) return;
+    if (holding && !hovering) {
+      holding = false;
+      holdPeek(false);
+      return;
+    }
+    if (hovering && !intro && peeks.current && ACTION_PEEKS.includes(peeks.current.kind)) {
+      holding = true;
+      holdPeek(true);
+      return;
+    }
     if (!hovering) {
       expanded = false;
       if (message) closeMessage();
@@ -359,8 +399,9 @@
     const scroller = (e.target as HTMLElement).closest("ul, .files");
     if (scroller && scroller.scrollHeight > scroller.clientHeight + 1 && Math.abs(e.deltaY) > Math.abs(e.deltaX)) return;
     e.preventDefault();
-    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
     const now = performance.now();
+    if (MAC) return swipe(e, now);
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
     if (now - lastSwitch < 250) {
       wheel = 0;
       lastWheel = now;
@@ -374,6 +415,20 @@
     wheel = 0;
     lastSwitch = now;
     step(d);
+  }
+  const MAC = navigator.userAgent.includes("Mac");
+  let swiped = false;
+  function swipe(e: WheelEvent, now: number) {
+    if (now - lastWheel > 160) {
+      wheel = 0;
+      swiped = false;
+    }
+    lastWheel = now;
+    if (swiped || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    wheel += e.deltaX;
+    if (Math.abs(wheel) < 30) return;
+    swiped = true;
+    step(Math.sign(wheel));
   }
   function step(d: number) {
     const i = tabs.indexOf(tab) + d;
@@ -396,6 +451,10 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="shell"
+  class:away
+  class:island
+  class:open={expanded || !!message || !!request}
+  style:--gap="{GAP}px"
   style:width="{box.w}px"
   style:--ear="{ear}px"
   style:zoom={scale === 1 ? undefined : scale}
@@ -415,12 +474,15 @@
     </span>
   {/if}
 </span>
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   class="notch"
   style:height="{box.h}px"
   style:--radius="{radius}px"
+  style:--inset="{inset}px"
   bind:this={el}
   oncontextmenu={(e) => (e.preventDefault(), invoke("settings_open"))}
+  onclick={peekClick}
 >
   {#if aura}<Aura color={aura} />{/if}
   {#if !expanded && !message && !request && !intro && collapsed !== "peek" && (privacy.mic || privacy.cam)}
@@ -499,7 +561,7 @@
       </div>
       <div class="page" role="tabpanel">
         {#key tab}
-        <div class="pane" in:slide out:slide={{ out: true }}>
+        <div class="pane" class:rise={opening} in:slide out:slide={{ out: true }}>
         {#if tab === "media"}
           {#if media.now}
             <MediaView now={media.now} />
@@ -530,17 +592,21 @@
       </div>
     </div>
   {:else if collapsed === "peek" && peeks.current}
-    <div class="layer" style:width="{inner.w}px" style:height="{inner.h}px" in:reveal={{ delay: 60, duration: 220 }} out:fade={{ duration: fadeMs(80) }}><Peek peek={peeks.current} /></div>
+    <div class="layer" class:below={inset > 0} style:width="{inner.w}px" style:height="{inner.h}px" in:reveal={{ delay: 60, duration: 220 }} out:fade={{ duration: fadeMs(80) }}>
+      {#key peeks.current.kind}
+        <div class="swap" in:reveal={{ delay: 40, duration: 200 }} out:fade={{ duration: fadeMs(90) }}><Peek peek={peeks.current} /></div>
+      {/key}
+    </div>
   {:else if collapsed === "focus"}
     <div class="layer" style:width="{inner.w}px" style:height="{inner.h}px" in:reveal={{ delay: 60, duration: 220 }} out:fade={{ duration: fadeMs(80) }}><FocusPill /></div>
   {:else if collapsed === "media" && media.now}
-    <div class="layer" style:width="{inner.w}px" style:height="{inner.h}px" in:reveal={{ delay: 60, duration: 220 }} out:fade={{ duration: fadeMs(80) }}><MediaPill now={media.now} /></div>
+    <div class="layer" style:width="{inner.w}px" style:height="{inner.h}px" in:reveal={{ delay: 60, duration: 220 }} out:fade={{ duration: fadeMs(80) }}><MediaPill now={media.now} inline={!hardware} /></div>
   {:else if collapsed === "agents"}
     <div class="layer" style:width="{inner.w}px" style:height="{inner.h}px" in:reveal={{ delay: 60, duration: 220 }} out:fade={{ duration: fadeMs(80) }}><ClaudePill /></div>
   {:else if collapsed === "download"}
     <div class="layer" style:width="{inner.w}px" style:height="{inner.h}px" in:reveal={{ delay: 60, duration: 220 }} out:fade={{ duration: fadeMs(80) }}><DownloadPill /></div>
   {:else if intro === "eyes" || settings.value.companion}
-    <div class="layer" style:width="{inner.w}px" style:height="{inner.h}px" in:reveal={{ delay: 60, duration: 220 }} out:fade={{ duration: fadeMs(80) }}><Companion awake={intro === "eyes"} /></div>
+    <div class="layer" class:wing={wing > 0} style:width="{inner.w}px" style:height="{inner.h}px" in:reveal={{ delay: 60, duration: 220 }} out:fade={{ duration: fadeMs(80) }}><Companion awake={intro === "eyes"} /></div>
   {/if}
 </div>
 </div>
@@ -549,6 +615,49 @@
   .shell {
     position: relative;
     margin: 0 auto;
+    transition: opacity 220ms ease-out;
+  }
+  .shell.away {
+    opacity: 0;
+    transition-delay: 200ms;
+  }
+  .shell.island {
+    margin-top: var(--gap);
+    transition:
+      opacity 220ms ease-out,
+      margin-top 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .shell.island.open {
+    margin-top: calc(var(--gap) - 3px);
+  }
+  .layer.below {
+    padding-top: var(--inset);
+    box-sizing: border-box;
+  }
+  :global(html:not(.reduce-motion)) .rise > :global(*) > :global(*) {
+    animation: rise 300ms cubic-bezier(0.2, 0.8, 0.2, 1) 90ms backwards;
+  }
+  :global(html:not(.reduce-motion)) .rise > :global(*) > :global(:nth-child(2)) {
+    animation-delay: 125ms;
+  }
+  :global(html:not(.reduce-motion)) .rise > :global(*) > :global(:nth-child(3)) {
+    animation-delay: 160ms;
+  }
+  :global(html:not(.reduce-motion)) .rise > :global(*) > :global(:nth-child(n + 4)) {
+    animation-delay: 195ms;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  .island .ear {
+    display: none;
+  }
+  .island .notch {
+    border-top: var(--notch-border);
+    border-radius: var(--radius);
   }
   .sides {
     position: absolute;
@@ -600,7 +709,7 @@
     position: relative;
     isolation: isolate;
     width: 100%;
-    background: var(--notch-bg);
+    background: var(--notch-fill);
     border: var(--notch-border);
     border-top: 0;
     box-sizing: border-box;
@@ -609,8 +718,13 @@
     display: grid;
     place-items: center;
   }
-  .notch > * {
+  .notch > *,
+  .swap {
     grid-area: 1 / 1;
+  }
+  .swap {
+    width: 100%;
+    height: 100%;
   }
   .layer {
     flex: none;
@@ -622,13 +736,20 @@
     flex: none;
     transform-origin: top center;
     align-self: start;
-    padding: 12px 20px 16px;
+    padding: calc(12px + var(--inset)) 20px 16px;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
+  .layer.wing {
+    place-items: center end;
+    padding-right: 20px;
+    box-sizing: border-box;
+  }
   .welcome {
+    padding-top: var(--inset);
+    box-sizing: border-box;
     flex-direction: column;
     display: flex;
     align-items: center;

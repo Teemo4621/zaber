@@ -7,5 +7,7 @@
   <string>Zaber shows today's events and a heads-up before each one in the notch. It only reads your calendars, on this Mac.</string>
   <key>NSCalendarsUsageDescription</key>
   <string>Zaber shows today's events and a heads-up before each one in the notch. It only reads your calendars, on this Mac.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Zaber sends play, pause, next and previous to Music or Spotify when you press those buttons in the notch.</string>
 </dict>
 </plist>

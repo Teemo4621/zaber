@@ -6,7 +6,7 @@
   import { currentLine, type LyricLine } from "./lrc";
   import { fetchLyrics, media, mediaUi, positionNow, type NowPlaying } from "./media.svelte";
 
-  let { now }: { now: NowPlaying } = $props();
+  let { now, inline = true }: { now: NowPlaying; inline?: boolean } = $props();
 
   let lines = $state<LyricLine[] | null>(null);
   $effect(() => {
@@ -40,18 +40,37 @@
   });
 
   const artColor = $derived(settings.value.followArtwork ? mediaUi.artColor : null);
+
+  const BARS = [0, 1, 2, 3];
+  let bars = $state(BARS.map(() => 0.6));
+  $effect(() => {
+    if (!now.playing || reduceMotion()) return;
+    const start = performance.now();
+    const timer = setInterval(() => {
+      const t = (performance.now() - start) / 1000;
+      bars = BARS.map((i) => 0.25 + 0.75 * Math.abs(Math.sin(t * (3.1 + i * 0.7) + i * 1.3)));
+    }, 1000 / 12);
+    return () => clearInterval(timer);
+  });
 </script>
 
-<div class="live" class:on={line}>
+<div class="live" class:on={line && !inline}>
 <div class="pill">
   <Artwork src={now.artwork} size={22} />
+  {#if line && inline}
+    <span class="slot">
+      {#key line}
+        <p class="line" style:--wave={artColor ?? "var(--accent-media)"} in:fade={{ duration: reduceMotion() ? 0 : 220 }}>{line}</p>
+      {/key}
+    </span>
+  {/if}
   <div class="wave" class:paused={!now.playing} aria-hidden="true" style:--wave={artColor ?? "var(--accent-media)"}>
-    {#each [0, 1, 2, 3] as i (i)}
-      <span style:animation-delay="{i * -0.27}s"></span>
+    {#each BARS as i (i)}
+      <span style:transform="scaleY({bars[i].toFixed(2)})"></span>
     {/each}
   </div>
 </div>
-{#if line}
+{#if line && !inline}
   {#key line}
     <p class="line" style:--wave={artColor ?? "var(--accent-media)"} in:fade={{ duration: reduceMotion() ? 0 : 220 }}>{line}</p>
   {/key}
@@ -63,11 +82,20 @@
     width: 100%;
     height: 100%;
     display: grid;
-    grid-template-rows: 32px;
+    grid-template-rows: 100%;
     align-content: start;
   }
   .live.on {
-    grid-template-rows: 32px 1fr;
+    grid-template-rows: calc(100% - 24px) 24px;
+  }
+  .slot {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+  }
+  .slot .line {
+    grid-area: 1 / 1;
+    padding: 0 10px;
   }
   .line {
     margin: 0;
@@ -100,24 +128,8 @@
     border-radius: 2px;
     background: var(--wave);
     transform-origin: center;
-    animation: wave 0.9s ease-in-out infinite alternate;
   }
   :global(.glow) .wave:not(.paused) span {
     box-shadow: 0 0 3px color-mix(in srgb, var(--wave) 90%, transparent), 0 0 12px color-mix(in srgb, var(--wave) 60%, transparent);
-  }
-  .wave.paused span {
-    animation-play-state: paused;
-  }
-  @keyframes wave {
-    from {
-      transform: scaleY(0.25);
-    }
-    to {
-      transform: scaleY(1);
-    }
-  }
-  :global(.reduce-motion) .wave span {
-    animation: none;
-    transform: scaleY(0.6);
   }
 </style>

@@ -16,8 +16,22 @@ use super::{Action, NowPlaying, choose};
 static ARTWORK: Mutex<Option<(String, Option<String>)>> = Mutex::new(None);
 static SHOWN: Mutex<Option<String>> = Mutex::new(None);
 
+thread_local! {
+    static MANAGER: std::cell::OnceCell<Manager> = const { std::cell::OnceCell::new() };
+}
+
+fn manager() -> windows::core::Result<Manager> {
+    MANAGER.with(|m| {
+        if let Some(m) = m.get() {
+            return Ok(m.clone());
+        }
+        let fresh = Manager::RequestAsync()?.get()?;
+        Ok(m.get_or_init(|| fresh).clone())
+    })
+}
+
 fn session() -> windows::core::Result<Session> {
-    let mgr = Manager::RequestAsync()?.get()?;
+    let mgr = manager()?;
     let sessions: Vec<Session> = mgr.GetSessions()?.into_iter().collect();
     let info: Vec<(String, bool)> = sessions
         .iter()

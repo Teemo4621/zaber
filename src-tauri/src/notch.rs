@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem};
@@ -23,6 +23,9 @@ pub struct Rect {
 pub struct HitRect(Mutex<Rect>);
 
 static FOLLOW_CURSOR: AtomicBool = AtomicBool::new(false);
+static QUIET: AtomicBool = AtomicBool::new(false);
+static LOW_MEMORY: AtomicBool = AtomicBool::new(false);
+const LOW_MEMORY_AFTER: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, PartialEq, Serialize)]
 pub struct NotchSize {
@@ -38,8 +41,51 @@ pub fn notch_hardware() -> Option<NotchSize> {
 }
 
 #[tauri::command]
-pub fn notch_set_hit_rect(rect: Rect, state: tauri::State<HitRect>) {
+pub fn notch_set_hit_rect(rect: Rect, idle: bool, win: WebviewWindow, state: tauri::State<HitRect>) {
     *state.0.lock().unwrap() = rect;
+    QUIET.store(idle, Ordering::Relaxed);
+    if !idle {
+        memory(&win, false);
+    }
+}
+
+#[tauri::command]
+pub fn notch_set_visible(win: WebviewWindow, visible: bool) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{SW_HIDE, SW_SHOWNOACTIVATE, ShowWindow};
+        let h = win.hwnd().map_err(|e| e.to_string())?;
+        let _ = unsafe { ShowWindow(HWND(h.0), if visible { SW_SHOWNOACTIVATE } else { SW_HIDE }) };
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSWindow;
+        let ns = win.ns_window().map_err(|e| e.to_string())? as usize;
+        win.run_on_main_thread(move || {
+            let window = unsafe { &*(ns as *const NSWindow) };
+            if visible {
+                window.orderFrontRegardless();
+            } else {
+                window.orderOut(None);
+            }
+        })
+        .map_err(|e| e.to_string())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        if visible { win.show() } else { win.hide() }.map_err(|e| e.to_string())
+    }
+}
+
+fn memory(win: &WebviewWindow, low: bool) {
+    if LOW_MEMORY.swap(low, Ordering::Relaxed) != low {
+        #[cfg(windows)]
+        let _ = win.with_webview(move |w| memory_level(w, low));
+        #[cfg(not(windows))]
+        let _ = win;
+    }
 }
 
 #[tauri::command]
@@ -117,8 +163,6 @@ pub fn setup(app: &AppHandle, win: &WebviewWindow) -> tauri::Result<()> {
         place(win, &m)?;
     }
     win.set_ignore_cursor_events(true)?;
-    #[cfg(windows)]
-    let _ = win.with_webview(low_memory);
     watch_hover(win.clone());
 
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
@@ -224,6 +268,7 @@ fn watch_hover(win: WebviewWindow) {
         let mut on_top = (0isize, 0u8);
         let mut frame: Option<(PhysicalPosition<i32>, f64)> = None;
         let mut wait = 50;
+        let mut active = Instant::now();
         loop {
             thread::sleep(Duration::from_millis(wait));
             tick = tick.wrapping_add(1);
@@ -259,6 +304,12 @@ fn watch_hover(win: WebviewWindow) {
                 let _ = win.set_ignore_cursor_events(!inside);
                 let _ = win.emit("notch:hover", inside);
             }
+            if inside || step.is_some() || !QUIET.load(Ordering::Relaxed) {
+                active = Instant::now();
+                memory(&win, false);
+            } else if active.elapsed() > LOW_MEMORY_AFTER {
+                memory(&win, true);
+            }
             wait = if inside || step.is_some() { 50 } else { 120 };
         }
     }).ok();
@@ -277,14 +328,20 @@ fn cursor(win: &WebviewWindow) -> Option<PhysicalPosition<f64>> {
 }
 
 #[cfg(windows)]
-fn low_memory(webview: tauri::webview::PlatformWebview) {
-    use webview2_com::Microsoft::Web::WebView2::Win32::{COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, ICoreWebView2_19};
+fn memory_level(webview: tauri::webview::PlatformWebview, low: bool) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL, ICoreWebView2_19,
+    };
     use windows_core::Interface;
     unsafe {
         if let Ok(core) = webview.controller().CoreWebView2()
             && let Ok(core) = core.cast::<ICoreWebView2_19>()
         {
-            let _ = core.SetMemoryUsageTargetLevel(COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW);
+            let _ = core.SetMemoryUsageTargetLevel(if low {
+                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+            } else {
+                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+            });
         }
     }
 }

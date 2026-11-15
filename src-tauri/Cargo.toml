@@ -1,6 +1,6 @@
 [package]
 name = "zaber"
-version = "0.2.0"
+version = "0.2.1"
 description = "Notch app for Windows and macOS"
 edition = "2024"
 
@@ -31,9 +31,10 @@ windows-core = "0.62"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 block2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDate", "NSError", "NSGeometry", "NSString", "NSPredicate", "NSURL"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSAppleEventDescriptor", "NSAppleScript", "NSArray", "NSData", "NSDate", "NSDictionary", "NSDistributedNotificationCenter", "NSError", "NSGeometry", "NSNotification", "NSObject", "NSOperation", "NSPredicate", "NSProcessInfo", "NSRunLoop", "NSString", "NSURL", "NSValue"] }
 objc2-event-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-app-kit", "EKCalendar", "EKCalendarItem", "EKEvent", "EKEventStore", "EKObject", "EKTypes"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSColor", "NSColorSpace", "NSGraphics", "NSResponder", "NSScreen", "NSWindow"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSBitmapImageRep", "NSColor", "NSColorSpace", "NSGraphics", "NSGraphicsContext", "NSImage", "NSImageRep", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSScreen", "NSWindow", "NSWorkspace", "objc2-core-graphics"] }
+dispatch2 = { version = "0.3", default-features = false, features = ["std"] }
 
 [profile.release]
 codegen-units = 1

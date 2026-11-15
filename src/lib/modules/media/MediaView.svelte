@@ -27,7 +27,7 @@
 <div class="media" class:split={mediaUi.lyrics} style:--accent-media={artColor}>
   <div class="player">
     <div class="track">
-      <Artwork src={now.artwork} size={mediaUi.lyrics ? 48 : 56} />
+      <Artwork src={now.artwork} size={mediaUi.lyrics ? 48 : 64} />
       <div class="meta">
         <strong>{now.title}</strong>
         <span>{now.artist || now.album}{source ? ` · ${source}` : ""}{now.playing ? "" : ` · ${t("media.paused")}`}</span>
@@ -62,6 +62,13 @@
 </div>
 
 <style>
+  .media {
+    height: 100%;
+  }
+  .media:not(.split) .player {
+    height: 100%;
+    align-content: space-between;
+  }
   .media.split {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

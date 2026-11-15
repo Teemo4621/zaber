@@ -36,6 +36,7 @@ pub fn run() {
             notch::notch_set_hit_rect,
             notch::notch_set_display,
             notch::notch_hardware,
+            notch::notch_set_visible,
             notch::settings_open,
             notch::app_launch,
             uninstall::app_uninstall,

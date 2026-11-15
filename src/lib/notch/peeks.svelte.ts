@@ -56,6 +56,11 @@ export function showPeek(peek: Peek, seconds = settings.value.peekSeconds) {
   if (!sticky) timer = setTimeout(dismissPeek, seconds * 1000);
 }
 
+export function holdPeek(on: boolean) {
+  clearTimeout(timer);
+  if (!on && peeks.current && !isSticky(peeks.current)) timer = setTimeout(dismissPeek, settings.value.peekSeconds * 1000);
+}
+
 export function dismissPeek(kind?: Peek["kind"]) {
   if (kind && held?.kind === kind) held = null;
   if (kind && peeks.current?.kind !== kind) return;
@@ -105,7 +110,9 @@ listen<{ level: number }>("brightness:update", ({ payload }) => {
   if (settings.value.peeks.brightness) showPeek({ kind: "brightness", level: payload.level });
 });
 
+let shotAt = 0;
 listen<Copied>("clipboard:copied", ({ payload }) => {
+  if (payload.kind === "image" && performance.now() - shotAt < 4000) return;
   if (settings.value.peeks.clipboard) showPeek({ kind: "clipboard", copied: payload });
 });
 
@@ -116,6 +123,7 @@ listen<Change>("devices:change", ({ payload: d }) => {
 });
 
 listen<NewFile>("files:new", ({ payload }) => {
+  if (payload.source === "screenshot") shotAt = performance.now();
   if (settings.value.peeks.files) showPeek({ kind: "file", file: payload }, 6);
 });
 

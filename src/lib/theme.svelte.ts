@@ -14,6 +14,10 @@ export function applyTheme() {
     root.setProperty("--accent-media", system ?? s.accents.media);
     root.setProperty("--accent-hud", system ?? s.accents.hud);
     root.setProperty("--notch-bg", NOTCH_BG[s.notchStyle]);
+    root.setProperty(
+      "--notch-fill",
+      s.fade ? "linear-gradient(to bottom, var(--notch-bg) 45%, color-mix(in srgb, var(--notch-bg) 58%, transparent))" : "var(--notch-bg)",
+    );
     root.setProperty("--notch-border", s.notchStyle === "glass" ? "1px solid #ffffff22" : "0");
     root.setProperty("--pill-text", s.textSize === "large" ? "15px" : "13px");
     document.documentElement.classList.toggle("reduce-motion", reduceMotion());

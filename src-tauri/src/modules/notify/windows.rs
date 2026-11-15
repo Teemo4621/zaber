@@ -22,10 +22,24 @@ pub fn access() -> &'static str {
     }
 }
 
+static PARSED: std::sync::Mutex<Vec<Notice>> = std::sync::Mutex::new(Vec::new());
+
 pub fn list() -> Option<Vec<Notice>> {
     let l = Listener::Current().ok()?;
     let all = l.GetNotificationsAsync(NotificationKinds::Toast).ok()?.get().ok()?;
-    Some(all.into_iter().filter_map(|n| notice(&n).ok()).collect())
+    let mut parsed = PARSED.lock().unwrap();
+    let out: Vec<Notice> = all
+        .into_iter()
+        .filter_map(|n| {
+            let id = n.Id().ok()?;
+            match parsed.iter().find(|p| p.id == id) {
+                Some(p) => Some(p.clone()),
+                None => notice(&n).ok(),
+            }
+        })
+        .collect();
+    *parsed = out.clone();
+    Some(out)
 }
 
 fn notice(n: &UserNotification) -> windows::core::Result<Notice> {

@@ -22,7 +22,9 @@ export type Settings = {
   volumeKeys: boolean;
   claudeWait: number;
   notchStyle: "black" | "graphite" | "glass";
-  notchSize: "compact" | "standard" | "large";
+  shape: "notch" | "island";
+  notchSize: number;
+  fade: boolean;
   textSize: "standard" | "large";
   motion: "system" | "reduce";
   accents: { media: string; hud: string };
@@ -50,7 +52,9 @@ export const DEFAULT_SETTINGS: Settings = {
   volumeKeys: true,
   claudeWait: 60,
   notchStyle: "black",
-  notchSize: "standard",
+  shape: "notch",
+  notchSize: 1,
+  fade: false,
   textSize: "standard",
   motion: "system",
   accents: { media: "#30d158", hud: "#f5f5f7" },
@@ -71,6 +75,7 @@ export function mergeSettings(saved: unknown): Settings {
     ...s,
     tabs,
     lastTab: TAB_IDS.includes(s.lastTab as TabId) || s.lastTab === "agents" ? s.lastTab! : d.lastTab,
+    notchSize: notchScale(s.notchSize),
     peeks: { ...d.peeks, ...s.peeks },
     accents: { ...d.accents, ...s.accents },
     water: { ...d.water, ...s.water },
@@ -81,4 +86,10 @@ export const settings = persisted("settings", DEFAULT_SETTINGS, mergeSettings);
 
 export const updateSettings = (patch: Partial<Settings>) => settings.save({ ...settings.value, ...patch });
 
-export const NOTCH_SCALE: Record<Settings["notchSize"], number> = { compact: 0.88, standard: 1, large: 1.16 };
+const LEGACY_SIZE: Record<string, number> = { compact: 0.88, standard: 1, large: 1.16 };
+export const NOTCH_SIZE = { min: 0.8, max: 1.3 };
+
+function notchScale(v: unknown) {
+  const n = typeof v === "number" ? v : typeof v === "string" ? LEGACY_SIZE[v] : NaN;
+  return Number.isFinite(n) ? Math.min(NOTCH_SIZE.max, Math.max(NOTCH_SIZE.min, n)) : 1;
+}

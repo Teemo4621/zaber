@@ -99,9 +99,6 @@ pub fn start(app: AppHandle) {
         loop {
             thread::sleep(Duration::from_secs(1));
             tick = tick.wrapping_add(1);
-            if crate::modules::status::fullscreen() {
-                continue;
-            }
             let now: HashMap<String, Device> = probe.devices(tick).into_iter().map(|d| (d.id.clone(), d)).collect();
             *DRIVES.lock().unwrap() = now.values().filter_map(|d| d.path.clone()).collect();
             if let Some(before) = &known {
@@ -115,7 +112,7 @@ pub fn start(app: AppHandle) {
             }
             known = Some(now);
 
-            if tick.is_multiple_of(30) || tick == 1 {
+            if (tick.is_multiple_of(30) || tick == 1) && !crate::modules::status::fullscreen() {
                 let levels = probe.batteries();
                 let now: Vec<Level> = levels.iter().map(|(_, kind, name, level)| Level { kind: *kind, name: name.clone(), level: *level }).collect();
                 let mut last = LEVELS.lock().unwrap();
