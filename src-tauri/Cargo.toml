@@ -1,6 +1,6 @@
 [package]
 name = "zaber"
-version = "0.2.1"
+version = "1.0.0"
 description = "Notch app for Windows and macOS"
 edition = "2024"
 
